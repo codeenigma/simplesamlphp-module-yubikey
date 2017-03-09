@@ -16,7 +16,7 @@ $state = SimpleSAML_Auth_State::loadState($authStateId, 'yubikey:otp:init');
 $error = false;
 if (array_key_exists('otp', $_POST)) { // we were given an OTP
     try {
-        if (SimpleSAML\Module\yubikey\Auth\Process\OTP::authenticate($state, $_POST['otp'])) {
+        if (sspmod_yubikey_Auth_Process_OTP::authenticate($state, $_POST['otp'])) {
             SimpleSAML_Auth_State::saveState($state, 'yubikey:otp:init');
             SimpleSAML_Auth_ProcessingChain::resumeProcessing($state);
         } else {
@@ -29,7 +29,6 @@ if (array_key_exists('otp', $_POST)) { // we were given an OTP
 
 $cfg = SimpleSAML_Configuration::getInstance();
 $tpl = new SimpleSAML_XHTML_Template($cfg, 'yubikey:otp.php');
-$trans = $tpl->getTranslator();
 $tpl->data['params'] = array('StateId' => $authStateId);
-$tpl->data['error'] = ($error) ? $trans->t($error) : false;
+$tpl->data['error'] = ($error) ? $tpl->t($error) : false;
 $tpl->show();

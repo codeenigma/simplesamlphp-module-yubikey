@@ -6,11 +6,7 @@
  * @package SimpleSAML\Module\yubikey
  */
 
-namespace SimpleSAML\Module\yubikey\Auth\Process;
-
-use \SimpleSAML\Logger as Logger;
-
-class OTP extends \SimpleSAML_Auth_ProcessingFilter
+class sspmod_yubikey_Auth_Process_OTP extends SimpleSAML_Auth_ProcessingFilter
 {
 
     /**
@@ -108,7 +104,7 @@ class OTP extends \SimpleSAML_Auth_ProcessingFilter
         $this->apiClient = $cfg->getString('api_client_id');
         $this->apiKey = $cfg->getString('api_key');
         $this->abortIfMissing = $cfg->getBoolean('abort_if_missing', false);
-        $this->keyIdAttr = $cfg->getBoolean('key_id_attribute', 'yubikey');
+        $this->keyIdAttr = $cfg->getString('key_id_attribute', 'yubikey');
         $this->assuranceAttr = $cfg->getString('assurance_attribute', 'eduPersonAssurance');
         $this->assuranceValue = $cfg->getString('assurance_value', 'OTP');
         $this->apiHosts = $cfg->getArrayize('api_hosts', array(
@@ -151,7 +147,7 @@ class OTP extends \SimpleSAML_Auth_ProcessingFilter
         // check for previous auth
         if (!is_null($key_id) && in_array($key_id, $attrs[$this->keyIdAttr])) {
             // we were already authenticated using a valid yubikey
-            Logger::info('Reusing previous YubiKey authentication with key "'.$key_id.'".');
+            SimpleSAML_Logger::info('Reusing previous YubiKey authentication with key "'.$key_id.'".');
             return;
         }
 
@@ -166,11 +162,11 @@ class OTP extends \SimpleSAML_Auth_ProcessingFilter
             'self' => $this,
         );
 
-        Logger::debug('Initiating YubiKey authentication.');
+        SimpleSAML_Logger::debug('Initiating YubiKey authentication.');
 
         $sid = \SimpleSAML_Auth_State::saveState($state, 'yubikey:otp:init');
-        $url = \SimpleSAML\Module::getModuleURL('yubikey/otp.php');
-        \SimpleSAML\Utils\HTTP::redirectTrustedURL($url, array('StateId' => $sid));
+        $url = SimpleSAML_Module::getModuleURL('yubikey/otp.php');
+        SimpleSAML_Utilities::redirectTrustedURL($url, array('StateId' => $sid));
     }
 
 
@@ -202,8 +198,13 @@ class OTP extends \SimpleSAML_Auth_ProcessingFilter
 
         // obtain the identity of the yubikey
         $kid = substr($otp, 0, -32);
-        Logger::debug('Verifying Yubikey ID "'.$kid.'"');
+        SimpleSAML_Logger::debug('Verifying Yubikey ID "'.$kid.'"');
 
+        // This version of simpleSAMLphp won't autoload the YubiKey classes
+        // Load the classes in manually:
+        foreach (glob("/usr/share/simplesamlphp/vendor/enygma/yubikey/src/Yubikey/*.php") as $filename) {
+            require_once $filename;
+        }
         // verify the OTP against the API
         $api = new \Yubikey\Validate($cfg['apiKey'], $cfg['apiClient']);
         $api->setHosts($cfg['apiHosts']);
@@ -211,8 +212,8 @@ class OTP extends \SimpleSAML_Auth_ProcessingFilter
 
         // verify the identity corresponds to this user
         if (!in_array($kid, $cfg['keyIDs'])) {
-            Logger::warning('The YubiKey "'.$kid.'" is not valid for this user.');
-            Logger::stats('yubikey:otp: invalid YubiKey.');
+            SimpleSAML_Logger::warning('The YubiKey "'.$kid.'" is not valid for this user.');
+            SimpleSAML_Logger::stats('yubikey:otp: invalid YubiKey.');
             return false;
         }
 
@@ -225,14 +226,13 @@ class OTP extends \SimpleSAML_Auth_ProcessingFilter
             $session = \SimpleSAML_Session::getSessionFromRequest();
             $session->setData('yubikey:auth', $cfg['authID'], $kid);
             $session->registerLogoutHandler(
-                $cfg['authID'],
-                $cfg['self'],
+                'sspmod_yubikey_Auth_Process_OTP',
                 'logoutHandler'
             );
-            Logger::info('Successful authentication with YubiKey "'.$kid.'".');
+            SimpleSAML_Logger::info('Successful authentication with YubiKey "'.$kid.'".');
             return true;
         }
-        Logger::warning('Couldn\'t successfully authenticate YubiKey "'.$kid.'".');
+        SimpleSAML_Logger::warning('Couldn\'t successfully authenticate YubiKey "'.$kid.'".');
         return false;
     }
 
@@ -244,8 +244,8 @@ class OTP extends \SimpleSAML_Auth_ProcessingFilter
     public function logoutHandler()
     {
         $session = \SimpleSAML_Session::getSessionFromRequest();
-        $keyid = $session->getData('yubikey:auth', $this->authid);
-        Logger::info('Removing valid YubiKey authentication with key "'.$keyid.'".');
-        $session->deleteData('yubikey:auth', $this->authid);
+        $keyid = $session->getData('yubikey:auth', $session->getAuthority());
+        SimpleSAML_Logger::info('Removing valid YubiKey authentication with key "'.$keyid.'".');
+        $session->deleteData('yubikey:auth', $session->getAuthority());
     }
 }
